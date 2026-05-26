@@ -488,8 +488,14 @@ Add the following secrets:
 |---|---|---|
 | `AWS_ACCESS_KEY_ID` | Your IAM user access key ID | AWS authentication for Terraform |
 | `AWS_SECRET_ACCESS_KEY` | Your IAM user secret access key | AWS authentication for Terraform |
-| `DEV_DB_PASSWORD` | A strong password (min 8 chars) | RDS PostgreSQL master password |
-| `DEV_JWT_SECRET` | A long random string | JWT signing secret for the app |
+| `DEV_DB_PASSWORD` | A strong password (min 8 chars) | RDS PostgreSQL master password for dev |
+| `DEV_JWT_SECRET` | A long random string | JWT signing secret for dev |
+| `QA_DB_PASSWORD` | A strong password (min 8 chars) | RDS PostgreSQL master password for QA |
+| `QA_JWT_SECRET` | A long random string | JWT signing secret for QA |
+| `PROD_DB_PASSWORD` | A strong password (min 8 chars) | RDS PostgreSQL master password for prod |
+| `PROD_JWT_SECRET` | A long random string | JWT signing secret for prod |
+
+> **Secret naming convention**: Secrets are prefixed with the environment name in uppercase (`DEV_`, `QA_`, `PROD_`). The pipeline resolves the correct secret dynamically based on the environment selected in the workflow dropdown.
 
 ### 8.2 Add Repository Variable
 
@@ -514,34 +520,54 @@ openssl rand -hex 32
 
 ## 9. Step 6 — GitHub Environment Setup
 
-GitHub Environments add an approval gate before `terraform apply` runs. This ensures a human reviews the plan before infrastructure changes are applied.
+GitHub Environments add an approval gate before `terraform apply` runs. The pipeline is now environment-aware — a dropdown lets you select `dev`, `qa`, or `prod` when triggering manually. Each environment maps to a GitHub Environment with its own approval gate.
 
-### 9.1 Create the Dev Environment
+### 9.1 Create the Three Environments
 
 Go to your fork on GitHub:
 **Settings → Environments → New environment**
 
-- Name: `dev`
-- Click **Configure environment**
+Create all three environments:
 
-### 9.2 Add Required Reviewer
+| Environment Name | Protection |
+|---|---|
+| `dev` | Required reviewer: your GitHub username |
+| `qa` | Required reviewer: your GitHub username |
+| `prod` | Required reviewer: your GitHub username |
 
-Under **Deployment protection rules**:
-- Check **Required reviewers**
-- Search for and add your GitHub username
-- Leave **Prevent self-review** unchecked (you are a solo learner)
-- Click **Save protection rules**
+For each:
+1. Click **Configure environment**
+2. Under **Deployment protection rules** → check **Required reviewers**
+3. Add your GitHub username
+4. Leave **Prevent self-review** unchecked (solo learner)
+5. Click **Save protection rules**
 
-### 9.3 What This Does
+### 9.2 How the Environment Dropdown Works
 
-When the pipeline runs after a merge to `main`:
-1. The `plan` job runs automatically
-2. The `apply` job starts but **pauses** — GitHub shows a "Review deployments" button
-3. You review the plan in the Actions logs
-4. You click **Approve and deploy**
-5. `terraform apply` runs
+The workflow now has two dropdowns when you trigger manually:
 
-This prevents accidental infrastructure changes — even if bad code merges to main, a human must approve before anything changes in AWS.
+```
+Actions → Terraform Infrastructure → Run workflow
+  ├── Environment: [dev ▼]   ← picks dev / qa / prod
+  └── Action:      [plan ▼]  ← picks plan / apply / destroy
+```
+
+- **dev auto-deploys** on every push/PR to `main` that touches `envs/dev/**` or `modules/**`
+- **QA and prod are manual-only** — you intentionally choose them via the dropdown
+- The pipeline resolves secrets automatically: selecting `qa` uses `QA_DB_PASSWORD` and `QA_JWT_SECRET`; selecting `prod` uses `PROD_DB_PASSWORD` and `PROD_JWT_SECRET`
+- The approval gate uses the selected environment — approving `qa` pauses on the `qa` GitHub Environment, not `dev`
+
+### 9.3 Promoting from Dev → QA → Prod
+
+```
+1. Make infra change in a feature branch
+2. Open PR → dev auto-plans
+3. Merge to main → dev auto-applies (after approval)
+4. Verify dev is stable
+5. Actions → Run workflow → environment: qa, action: apply → approve
+6. Verify QA is stable
+7. Actions → Run workflow → environment: prod, action: apply → approve
+```
 
 ---
 
