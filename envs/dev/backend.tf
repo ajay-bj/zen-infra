@@ -2,9 +2,9 @@
 
 terraform {
   backend "s3" {
-    bucket = "zen-pharma-terraform-state-ajay-bj"
-    key    = "envs/dev/terraform.tfstate"
+    bucket       = "zen-pharma-terraform-state-ajay-bj"
+    key          = "envs/dev/terraform.tfstate"
     encrypt      = true
-    use_lockfile = true   # S3 native locking
+    use_lockfile = true # S3 native locking
   }
 }
