@@ -266,30 +266,80 @@ aws iam list-open-id-connect-providers
 
 ---
 
-### Step 4 — Create the IAM Role with a trust policy (Console)
+### Step 4 — Create the IAM Role with a trust policy (Console, click-by-click)
 
 The **trust policy** answers: "Which identity is allowed to assume this role?"
-We restrict it to exactly our OIDC provider AND our specific ServiceAccount
+We will restrict it to exactly our OIDC provider AND our specific ServiceAccount
 (`irsa-demo:s3-reader-sa`).
 
-**In the AWS Console:**
-1. Go to **IAM → Roles → Create role**.
-2. For **Trusted entity type**, choose **Web identity**.
-3. **Identity provider:** select your
-   `oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>` from the dropdown.
-4. **Audience:** select `sts.amazonaws.com`.
-5. Click **Next**.
-6. On the permissions page, search for and select **AmazonS3ReadOnlyAccess**,
-   then **Next**.
-7. **Role name:** `irsa-demo-s3-reader-role`. Click **Create role**.
+This is the step most people get stuck on, so we go screen by screen. Take your
+time and match each field exactly.
 
-**Now lock the trust policy to your exact ServiceAccount:**
-By default the Console trust policy only checks the audience (`aud`). We also
-want to restrict the **subject** (`sub`) so only OUR ServiceAccount can use it.
+#### 4.1 — Open the Create Role wizard
 
-1. Open the role you just created → **Trust relationships** tab → **Edit trust
-   policy**.
-2. Make it look like this (replace `<ACCOUNT_ID>`, `<REGION>`, `<OIDC_ID>`):
+1. In the AWS Console search bar, type **IAM** and open the **IAM** service.
+2. In the left menu, click **Roles** (under *Access management*).
+3. Click the orange **Create role** button (top right).
+
+You are now on the **Step 1: Select trusted entity** screen.
+
+#### 4.2 — Step 1 screen: Select trusted entity
+
+You will see a row of boxes under **Trusted entity type**:
+`AWS service` | `AWS account` | `Web identity` | `SAML 2.0 federation` | `Custom trust policy`.
+
+> ⚠️ The first box, **AWS service**, is selected by default. That is the WRONG
+> one for us — that is for EC2/Lambda. Do **not** leave it on that.
+
+1. Click the **Web identity** box (third one). It will highlight blue.
+2. A new section titled **Web identity** appears below with two dropdowns:
+   - **Identity provider:** click the dropdown and choose your cluster's OIDC
+     provider:
+     ```
+     oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>
+     ```
+     (This is the value you found in Step 3. If the dropdown is empty, the OIDC
+     provider is not registered in IAM yet — go back to Step 3.)
+   - **Audience:** click the dropdown and choose **`sts.amazonaws.com`**.
+     (It is usually the only option.)
+3. Leave everything else as-is and click **Next** (bottom right).
+
+#### 4.3 — Step 2 screen: Add permissions
+
+This is where you choose WHAT the role is allowed to do.
+
+1. In the **Permissions policies** search box, type: `AmazonS3ReadOnlyAccess`.
+2. In the results, tick the **checkbox** to the left of
+   **AmazonS3ReadOnlyAccess**.
+3. Click **Next** (bottom right).
+
+> For a real app you would use a custom, tightly-scoped policy (e.g. read only
+> one specific bucket). `AmazonS3ReadOnlyAccess` is fine for this learning demo.
+
+#### 4.4 — Step 3 screen: Name, review, and create
+
+1. **Role name:** enter exactly:
+   ```
+   irsa-demo-s3-reader-role
+   ```
+2. (Optional) **Description:** "Demo role for IRSA hands-on — S3 read only".
+3. Scroll down to the **Step 1: Select trusted entities** review box. It shows
+   the trust policy the wizard generated for you. Right now it only checks the
+   audience (`aud`). We will tighten it in the next sub-step.
+4. Click **Create role** (bottom right).
+
+You will be returned to the Roles list with a green success banner.
+
+#### 4.5 — Lock the trust policy to your exact ServiceAccount (important)
+
+The wizard's trust policy lets **any** ServiceAccount in the cluster assume this
+role. We want ONLY `irsa-demo:s3-reader-sa`. We add a `sub` condition.
+
+1. In the Roles list, click your new role **`irsa-demo-s3-reader-role`**.
+2. Click the **Trust relationships** tab.
+3. Click **Edit trust policy**.
+4. Replace the entire JSON with the following. **Replace `<ACCOUNT_ID>`,
+   `<REGION>`, and `<OIDC_ID>` with your own values** (the same ones from Step 3):
 
 ```json
 {
@@ -312,7 +362,12 @@ want to restrict the **subject** (`sub`) so only OUR ServiceAccount can use it.
 }
 ```
 
-3. Click **Update policy**.
+5. Click **Update policy**.
+
+> 💡 Watch the punctuation: the keys are the OIDC provider string **without**
+> `https://`, followed by `:aud` and `:sub`. A common mistake is leaving
+> `https://` in, or using the wrong region/ID — the role then silently fails to
+> assume and you get `AccessDenied` in Step 7.
 
 **Read the two conditions out loud — this is the whole security model:**
 - `:aud = sts.amazonaws.com` → the token must be intended for AWS STS.
@@ -321,7 +376,10 @@ want to restrict the **subject** (`sub`) so only OUR ServiceAccount can use it.
   role. A pod in any other namespace, or using any other ServiceAccount, is
   rejected. **This is the per-app isolation we wanted.**
 
-After creating, open the role and copy its **ARN** from the top of the page:
+#### 4.6 — Copy the role ARN
+
+Still on the role page, at the very top you will see **ARN** with a copy icon.
+Copy it — you need it in Step 5:
 ```
 arn:aws:iam::<ACCOUNT_ID>:role/irsa-demo-s3-reader-role
 ```
