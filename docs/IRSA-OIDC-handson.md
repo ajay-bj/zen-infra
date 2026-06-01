@@ -404,12 +404,20 @@ aws iam attach-role-policy --role-name irsa-demo-s3-reader-role --policy-arn arn
 This annotation is the bridge between Kubernetes and IAM. It tells EKS: "when a
 pod uses this ServiceAccount, inject a token and target this role."
 
+You can do this **either** with a one-line command **or** by editing the YAML.
+Pick ONE of the two options below.
+
+#### Option A — Quick command (no file editing)
+
 ```bash
 kubectl annotate serviceaccount s3-reader-sa -n irsa-demo \
   eks.amazonaws.com/role-arn=arn:aws:iam::<ACCOUNT_ID>:role/irsa-demo-s3-reader-role --overwrite
 ```
 
-Or, declaratively, edit the ServiceAccount in your YAML and re-apply:
+#### Option B — Declarative (edit the YAML and re-apply)
+
+1. Open `irsa-demo-deploy.yaml` and add the `annotations` block to the
+   ServiceAccount so it looks like this:
 
 ```yaml
 apiVersion: v1
@@ -420,6 +428,26 @@ metadata:
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/irsa-demo-s3-reader-role
 ```
+
+2. Re-apply the file. `kubectl apply` is idempotent — it only updates what
+   changed (here, it adds the annotation to the existing ServiceAccount):
+
+```bash
+kubectl apply -f irsa-demo-deploy.yaml
+```
+
+#### Verify the annotation was set (either option)
+
+```bash
+kubectl get serviceaccount s3-reader-sa -n irsa-demo -o yaml
+```
+
+You should see your `eks.amazonaws.com/role-arn` under `annotations`. If it is
+there, the link is in place.
+
+> Note: changing the ServiceAccount annotation does NOT automatically update
+> pods that are already running. The token is only injected when a pod starts.
+> That is why Step 6 restarts the deployment.
 
 ---
 
