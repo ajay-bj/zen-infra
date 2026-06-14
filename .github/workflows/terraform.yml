@@ -53,6 +53,12 @@ jobs:
   plan:
     name: Terraform Plan (${{ github.event.inputs.environment || 'dev' }})
     runs-on: ubuntu-latest
+    # Skip planning on a destroy dispatch — otherwise this job runs in parallel
+    # with the destroy job, fails, and its lock-cleanup step deletes the state
+    # lock the destroy job is still holding (causing a false "lock release" error).
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.action != 'destroy'
     defaults:
       run:
         working-directory: envs/${{ github.event.inputs.environment || 'dev' }}
